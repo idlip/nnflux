@@ -1,0 +1,63 @@
+#+TITLE: nnflux: Gnus Miniflux Reader
+
+Read feeds from self-hosted [[https://miniflux.app/][Miniflux]] server through Gnus, as normal Gnus groups.
+
+* Features
+
+- One Gnus group per Miniflux feed.
+- Read/unread marks sync both ways with the server.
+- Star (Gnus =!= "tick" mark) syncs both ways with Miniflux bookmarks.
+- Server is treated as the source of truth on pull (~M-g~ or re-entering a group): local marks for any
+  article the server reports on are set to match it, so there is no manual conflict resolution.
+- Token auth (~X-Auth-Token~) or HTTP Basic Auth (account username/password).
+- No local article database, articles are fetched live into memory each time you open a group.
+
+* Install
+
+** With =use-package= and =:vc= (Emacs 30+)
+
+#+begin_src emacs-lisp
+(use-package nnflux
+  :vc (:url "https://github.com/idlip/nnflux" :rev :newest)
+  :after gnus)
+#+end_src
+
+** Manual
+
+Download =nnflux.el= and load it directly:
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "/path/to/nnflux")
+(require 'nnflux)
+#+end_src
+
+* Setup
+
+With an API token (Miniflux: Settings -> API Keys -> Create a new API key):
+
+#+begin_src emacs-lisp
+(setq gnus-secondary-select-methods
+      '((nnflux "home"
+         (nnflux-address "https://miniflux.example.com")
+         (nnflux-token "your-api-token"))))
+#+end_src
+
+Or with your account username/password instead of a token:
+
+#+begin_src emacs-lisp
+(setq gnus-secondary-select-methods
+      '((nnflux "home"
+         (nnflux-address "https://miniflux.example.com")
+         (nnflux-user "your-username")
+         (nnflux-password "your-password"))))
+#+end_src
+
+Or leave both unset and store the credential in =auth-source= (=~/.authinfo=, =~/.authinfo.gpg=, etc.)
+instead, keyed on =nnflux-address='s host. For an API token, use a login of =api-token= (also accepts
+=token= or =nnflux-token=) so it's recognized as a token rather than a password:
+
+#+begin_src conf
+machine miniflux.example.com login api-token password your-api-token
+#+end_src
+
+Any other login is treated as a Basic Auth username/password pair.
