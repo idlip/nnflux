@@ -2,6 +2,10 @@
 
 Read feeds from self-hosted [[https://miniflux.app/][Miniflux]] server through Gnus, as normal Gnus groups.
 
+#+begin_quote
+  This package was written with the help of AI for accomplishing its purpose.
+#+end_quote
+
 * Features
 
 - One Gnus group per Miniflux feed.
@@ -38,7 +42,7 @@ With an API token (Miniflux: Settings -> API Keys -> Create a new API key):
 #+begin_src emacs-lisp
 (setq gnus-secondary-select-methods
       '((nnflux "home"
-         (nnflux-address "https://miniflux.example.com")
+         (nnflux-address "https://miniflux.domain.tld")
          (nnflux-token "your-api-token"))))
 #+end_src
 
@@ -47,7 +51,7 @@ Or with your account username/password instead of a token:
 #+begin_src emacs-lisp
 (setq gnus-secondary-select-methods
       '((nnflux "home"
-         (nnflux-address "https://miniflux.example.com")
+         (nnflux-address "https://miniflux.domain.tld")
          (nnflux-user "your-username")
          (nnflux-password "your-password"))))
 #+end_src
@@ -57,7 +61,56 @@ instead, keyed on =nnflux-address='s host. For an API token, use a login of =api
 =token= or =nnflux-token=) so it's recognized as a token rather than a password:
 
 #+begin_src conf
-machine miniflux.example.com login api-token password your-api-token
+machine miniflux.domain.tld login api-token password your-api-token
 #+end_src
 
 Any other login is treated as a Basic Auth username/password pair.
+
+* Usage
+
+All through normal Gnus keys, once subscribed to a group:
+
+- Mark read/unread: normal Gnus commands.Pushed to the server when you leave the group (~q~).
+- Star: Gnus's tick mark (~!~ to tick, ~M-u~ to untick).
+- Pull server changes (e.g.read on the Miniflux phone app): ~M-g~ on the group, or re-enter it.
+- Describe a feed (title, description, site url): ~d~ (~gnus-group-describe-group~) in the Group buffer.
+- Subscribe to a new feed: ~M-x nnflux-subscribe-feed~, then enter a feed URL. Gnus's normal new-group prompt picks it up from there (equivalent to pressing ~g~).
+
+* Roadmap / TODO
+
+Things that could be added or improved, roughly in order of how naturally they fit both Gnus's and
+Miniflux's own concepts:
+
+- [ ] *Gnus Search*
+
+  =G G= to search and find feed using miniflux's default search method.
+
+- [ ] *E2E & Unit Testing*
+
+  Add ERT tests so development is smoother and deterministic than manual workflow test.
+
+- [ ] *Categories -> Gnus Topics*.
+
+  Auto-place each feed's group under a ~gnus-topic-mode~ topic named after its Miniflux category.
+  Can provide a variable to either group or not, so user can control if they want same synced or have different topic grouping in gnus manually.
+
+- [ ] *Enclosures as attachments*.
+
+  Podcast/media enclosures on entries, shown as clickable links in the article body (the pattern
+  ~nnrss.el~ already uses for the same problem). Easy to do =w= to save or embark-act to play via mpv
+
+- [ ] *Full-archive sync*.
+
+  Two-way sync and search only cover whatever's in the current fetch window (~nnflux-fetch-limit~,
+  default 500 per feed) there's no paging past that for either direction.
+
+* References
+
+- Miniflux API docs : https://miniflux.app/docs/api.html
+- miniflux.el (elfeed-based Miniflux client, sibling project) : https://github.com/bladrome/miniflux.el
+- elfeed-protocol (Fever/ownCloud/TT-RSS/NewsBlur protocols for elfeed) : https://github.com/fasheng/elfeed-protocol
+- elfeed : https://github.com/emacs-elfeed/elfeed
+
+* License
+
+GPL-3.0-or-later, matching Gnus/Emacs itself. See [[file:LICENSE][LICENSE]].
