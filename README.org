@@ -16,6 +16,13 @@ Read feeds from self-hosted [[https://miniflux.app/][Miniflux]] server through G
 - Token auth (~X-Auth-Token~) or HTTP Basic Auth (account username/password).
 - No local article database, articles are fetched live into memory each time you open a group.
 
+-------
+
+#+caption: Gnus screenshot showing nnflux group for PlanetEmacs post
+[[file:screenshot.png]]
+
+- Screenshot shows the Gnus summary and article buffer for nnflux group of PlanetEmacs post by Sacha Chua.
+
 * Install
 
 ** With =use-package= and =:vc= (Emacs 30+)
