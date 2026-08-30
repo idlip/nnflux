@@ -59,6 +59,11 @@
 ;;   re-enter it.  The server is treated as the source of truth for
 ;;   any article it reports on; local marks for those articles are
 ;;   overwritten to match it, so there is nothing to resolve by hand.
+;; - Podcast/media enclosures show as a clickable link in the article
+;;   body (so "w"/gnus-summary-browse-url finds it), and the
+;;   X-Enclosure-URL header is made visible by default.
+;; - press 't' to see more info for each posts embedded
+;;
 ;;
 ;;; Code:
 
@@ -75,6 +80,11 @@
 
 ;; Tell Gnus this backend can push read/star marks to its server
 (gnus-declare-backend "nnflux" 'none 'address 'server-marks)
+
+;; Make the enclosure header visible by default
+(defvar gnus-visible-headers) ; defined in gnus-art.el
+(with-eval-after-load 'gnus-art
+  (setq gnus-visible-headers (concat gnus-visible-headers "\\|^X-Enclosure-URL:")))
 
 (defgroup nnflux nil
   "Read Miniflux feeds through Gnus."
@@ -277,7 +287,7 @@ touched; case, spaces, and punctuation are otherwise left alone."
           (insert (format "%S %d 1 n\n" group total)))))
     t))
 
-(deffoo nnflux-request-group (group &optional server _fast _info)
+(deffoo nnflux-request-group (group &optional server _fast info)
   "Fetch GROUP's entries from the server and report its article range.
 Articles are numbered 1..N, oldest to newest of this fetch -- not by
 their real Miniflux id, which is sparse and global across every feed
@@ -299,6 +309,7 @@ The real id lives in the entry alist and is used for all API calls."
           (setq n (1+ n))
           (puthash n entry table))
         (puthash group table nnflux-group-entries)
+        (when info (nnflux-request-update-info group info server))
         (nnheader-insert "211 %d %d %d %s\n" n (if (> n 0) 1 0) n group)))))
 
 (deffoo nnflux-close-group (_group &optional _server)
@@ -403,9 +414,30 @@ older entries outside that window keep whatever Gnus had for them."
             (when entry (insert (nnflux--nov-line id entry) "\n")))))))
   'nov)
 
+(defun nnflux--insert-header (name value)
+  "Insert a NAME header with VALUE, unless VALUE is nil or empty.
+Used for the optional headers below: since none of these names match
+`gnus-visible-headers', Gnus hides them by default and reveals them
+with `gnus-summary-toggle-header' (\"t\") like any other header."
+  (when (and value (not (string-empty-p value)))
+    (insert name ": " value "\n")))
+
+(defun nnflux--miniflux-url (entry)
+  "Link to ENTRY's own page in the Miniflux web UI, or nil if unknown.
+Uses `/feed/{feedID}/entry/{entryID}' (`showFeedEntryPage' in
+Miniflux's own `internal/ui/ui.go' route table) rather than one of the
+`/unread/...'/`/starred/...' variants, since those are scoped to a
+read-status list this entry may no longer belong to by the time the
+link is followed."
+  (let ((feed-id (alist-get 'feed_id entry))
+        (id (alist-get 'id entry)))
+    (when (and feed-id id)
+      (format "%s/feed/%d/entry/%d" (string-remove-suffix "/" nnflux-address) feed-id id))))
+
 (defun nnflux--insert-article (entry group)
   "Write ENTRY as a plain message for GROUP into the current buffer.
-Give the message an HTML body."
+Give the message an HTML body, plus optional headers.
+Hidden by default, shown with key t in article buffer."
   (insert "Newsgroups: " group "\n")
   (insert "Subject: " (or (alist-get 'title entry) "") "\n")
   (insert "From: " (or (alist-get 'author entry) "unknown") "\n")
@@ -413,12 +445,46 @@ Give the message an HTML body."
   (insert "<#part type=\"text/html\">\n<html><body>\n")
   (insert (or (alist-get 'content entry) ""))
   (insert "\n<p><a href=\"" (or (alist-get 'url entry) "") "\">original</a></p>\n")
+  ;; Enclosures (podcast/media attachments) as clickable body links, same
+  ;; place `nnrss.el' puts them for the identical problem.
+  (dolist (enclosure (alist-get 'enclosures entry))
+    (let ((enclosure-url (alist-get 'url enclosure)))
+      (when (and enclosure-url (not (string-empty-p enclosure-url)))
+        (insert "<p><a href=\"" enclosure-url "\">"
+                (if (string-match "/\\([^/]*\\)\\'" enclosure-url)
+                    (match-string 1 enclosure-url)
+                  "enclosure")
+                "</a> ("
+                (or (alist-get 'mime_type enclosure) "")
+                (if (numberp (alist-get 'size enclosure))
+                    (format ", %s" (file-size-human-readable (alist-get 'size enclosure)))
+                  "")
+                ")</p>\n"))))
   (insert "</body></html>\n<#/part>\n")
   (mml-to-mime)
   (goto-char (point-min))
   (search-forward "\n\n")
   (forward-line -1)
-  (insert "Message-ID: " (nnflux--message-id (alist-get 'id entry)) "\n"))
+  (insert "Message-ID: " (nnflux--message-id (alist-get 'id entry)) "\n")
+  (let* ((feed (alist-get 'feed entry))
+         (category (and feed (alist-get 'category feed)))
+         (reading-time (alist-get 'reading_time entry))
+         (tags (delq nil (mapcar (lambda (tag) (and (stringp tag) (not (string-empty-p tag)) tag))
+                                  (alist-get 'tags entry))))
+         (enclosure-urls (delq nil (mapcar (lambda (enc) (let ((u (alist-get 'url enc)))
+                                                            (and u (not (string-empty-p u)) u)))
+                                            (alist-get 'enclosures entry)))))
+    (nnflux--insert-header "Archived-At" (alist-get 'url entry))
+    (nnflux--insert-header "X-Feed-URL" (and feed (alist-get 'feed_url feed)))
+    (nnflux--insert-header "X-Site-URL" (and feed (alist-get 'site_url feed)))
+    (nnflux--insert-header "X-Category" (and category (alist-get 'title category)))
+    (nnflux--insert-header "X-Comments-URL" (alist-get 'comments_url entry))
+    (when (and (numberp reading-time) (> reading-time 0))
+      (nnflux--insert-header "X-Reading-Time" (format "%d min" reading-time)))
+    (nnflux--insert-header "X-Miniflux-URL" (nnflux--miniflux-url entry))
+    (when tags (nnflux--insert-header "X-Tags" (mapconcat #'identity tags ", ")))
+    (when enclosure-urls
+      (nnflux--insert-header "X-Enclosure-URL" (mapconcat #'identity enclosure-urls ", ")))))
 
 (deffoo nnflux-request-article (article &optional group server to-buffer)
   "Fetch ARTICLE (a local article number, see `nnflux-request-group')."
@@ -497,7 +563,7 @@ SERVER defaults to the current group's server in the Group buffer, the
 sole configured nnflux server, or a prompt if there's more than one.
 Newly subscribed feeds are picked up by Gnus's own new-group handling
 \(the same as pressing \\<gnus-group-mode-map>\\[gnus-group-get-new-news]\), not a custom refresh here."
-  (interactive (list (read-string "Feed URL: ") (nnflux--pick-server)))
+  (interactive (list (read-string "Feed URL: " (url-get-url-at-point)) (nnflux--pick-server)))
   (nnflux--use-server server)
   (let* ((result (nnflux--post "/feeds" `((feed_url . ,url))))
          (feed-id (alist-get 'feed_id result)))
