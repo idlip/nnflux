@@ -47,10 +47,17 @@ Download =nnflux.el= and load it directly:
 With an API token (Miniflux: Settings -> API Keys -> Create a new API key):
 
 #+begin_src emacs-lisp
-(setq gnus-secondary-select-methods
-      '((nnflux "home"
-         (nnflux-address "https://miniflux.domain.tld")
-         (nnflux-token "your-api-token"))))
+  (setq gnus-select-method
+        '(nnnil ""))
+  (setq gnus-secondary-select-methods
+        '((nnflux "home"
+           (nnflux-address "https://miniflux.domain.tld")
+           (nnflux-token "your-api-token"))
+
+          ;; to flatten all miniflux feeds into one group.
+          ;; refer: info:gnus#Combined Groups
+          (nnvirtual "all-feeds"
+                     (nnvirtual-component-regexp "^nnflux\\+home:"))))
 #+end_src
 
 Or with your account username/password instead of a token:
@@ -88,23 +95,27 @@ All through normal Gnus keys, once subscribed to a group:
 Things that could be added or improved, roughly in order of how naturally they fit both Gnus's and
 Miniflux's own concepts:
 
-- [ ] *Gnus Search*
+- [X] *Enclosures as attachments*.
 
-  =G G= to search and find feed using miniflux's default search method.
+  Podcast/media enclosures on entries, shown as clickable links in the article body (the pattern
+  ~nnrss.el~ already uses for the same problem). Easy to do =w= to save or embark-act to play via mpv
 
 - [ ] *E2E & Unit Testing*
 
   Add ERT tests so development is smoother and deterministic than manual workflow test.
+
+- [ ] *Gnus Search*
+
+  =G G= to search and find feed using miniflux's default search method.
 
 - [ ] *Categories -> Gnus Topics*.
 
   Auto-place each feed's group under a ~gnus-topic-mode~ topic named after its Miniflux category.
   Can provide a variable to either group or not, so user can control if they want same synced or have different topic grouping in gnus manually.
 
-- [ ] *Enclosures as attachments*.
+- [ ] *Full-archive sync*.
 
-  Podcast/media enclosures on entries, shown as clickable links in the article body (the pattern
-  ~nnrss.el~ already uses for the same problem). Easy to do =w= to save or embark-act to play via mpv
+  Gotta figure out gnus-agent method and tweak it. So download and read works as intended
 
 - [ ] *Full-archive sync*.
 

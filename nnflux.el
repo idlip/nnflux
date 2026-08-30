@@ -63,6 +63,7 @@
 ;;   body (so "w"/gnus-summary-browse-url finds it), and the
 ;;   X-Enclosure-URL header is made visible by default.
 ;; - press 't' to see more info for each posts embedded
+;; - Use nnvirtual to group all feed into flat list
 ;;
 ;;
 ;;; Code:
