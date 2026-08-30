@@ -80,8 +80,9 @@
   "Read Miniflux feeds through Gnus."
   :group 'gnus)
 
-(defcustom nnflux-fetch-limit 500
-  "How many entries to pull per feed when a group is opened."
+(defcustom nnflux-fetch-limit 0
+  "How many entries to pull per feed when a group is opened.
+Sent directly as SQL limit. Keep 0 for no limit."
   :type 'integer
   :group 'nnflux)
 
