@@ -255,10 +255,18 @@ touched; case, spaces, and punctuation are otherwise left alone."
     (nnheader-report
      'nnflux "set nnflux-address, and nnflux-token, nnflux-user/nnflux-password, or an auth-source entry")))
 
+(defun nnflux--server-defs (server)
+  "Miniflux SERVER address (VAR VALUE) from Gnus's select-method config."
+  (catch 'found
+    (dolist (method (cons gnus-select-method gnus-secondary-select-methods))
+      (when (and (eq (car method) 'nnflux) (equal (cadr method) server))
+        (throw 'found (cddr method))))
+    nil))
+
 (defun nnflux--use-server (server)
   "Make sure SERVER's connection settings are active."
   (when (and server (not (nnflux-server-opened server)))
-    (nnflux-open-server server)))
+    (nnflux-open-server server (nnflux--server-defs server))))
 
 (deffoo nnflux-request-list (&optional server)
   "List every feed on the server as a Gnus group."
