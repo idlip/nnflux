@@ -47,6 +47,7 @@ Download =nnflux.el= and load it directly:
 With an API token (Miniflux: Settings -> API Keys -> Create a new API key):
 
 #+begin_src emacs-lisp
+  (setq nnflux-address "https://miniflux.domain.tld")
   (setq gnus-select-method
         '(nnnil ""))
   (setq gnus-secondary-select-methods
@@ -117,10 +118,44 @@ Miniflux's own concepts:
 
   Gotta figure out gnus-agent method and tweak it. So download and read works as intended
 
-- [ ] *Full-archive sync*.
+* Extending nnflux
 
-  Two-way sync and search only cover whatever's in the current fetch window (~nnflux-fetch-limit~,
-  default 500 per feed) there's no paging past that for either direction.
+nnflux ships a small, fixed set of commands (subscribe, search, describe, mark sync) for integrating with gnus specifically.
+
+For anything else [[https://miniflux.app/docs/api.html][Miniflux's API]] supports, check for nnflux helper functions (=C-h f nnflux-= ): ~nnflux--pick-server~, ~nnflux--use-server~, and ~nnflux--get~/~nnflux--put~/~nnflux--post~
+
+** Refresh a feed right now
+
+Example: refresh a feed right now, picked from a ~completing-read~ list annotated with
+each feed's category/site/last-checked/error:
+
+#+begin_src emacs-lisp
+  (defun nnflux-refresh-feed ()
+    "Ask Miniflux to re-poll one feed URL right now."
+    (interactive)
+    (let* ((server (nnflux--pick-server))
+           (_ (nnflux--use-server server))
+           (feeds (nnflux--get "/feeds"))
+           (table (make-hash-table :test 'equal))
+           (candidates
+            (mapcar (lambda (feed)
+                      (puthash (alist-get 'title feed) feed table)
+                      (alist-get 'title feed))
+                    feeds))
+           (completion-extra-properties
+            (list :annotation-function
+                  (lambda (c)
+                    (let ((f (gethash c table)))
+                      (format "  -- %s, checked %s"
+                              (alist-get 'site_url f) (alist-get 'checked_at f))))))
+           (choice (completing-read "Refresh feed: " candidates nil t))
+           (feed-id (alist-get 'id (gethash choice table))))
+      (nnflux--put (format "/feeds/%d/refresh" feed-id) nil)
+      (message "nnflux: refreshed feed %d" feed-id)))
+#+end_src
+
+=PUT /feeds/{id}/refresh= is synchronous, press ~M-g~ on the group to pull them into Gnus.
+Ideally miniflux should be configured to poll globally as desired.
 
 * References
 
