@@ -160,6 +160,76 @@ Miniflux's own concepts:
 
   Gotta figure out gnus-agent method and tweak it. So download and read works as intended
 
+* Testing
+
+Unit tests (~nnflux-tests.el~, using Emacs's built-in =ert=) cover the pure functions -- no network
+needed:
+
+#+begin_src bash
+  emacs -Q -batch -l ert -l nnflux.el -l nnflux-tests.el \
+        -f ert-run-tests-batch-and-exit
+#+end_src
+
+There are also live tests that exercise the backend against a real Miniflux server (list feeds, open
+a group, fetch headers/an article). They are strictly read-only -- they never push marks -- and skip
+automatically if no server is configured. Point them at a server with environment variables:
+
+#+begin_src bash
+  NNFLUX_TEST_URL=http://localhost:8080 \
+  NNFLUX_TEST_TOKEN=your-api-token \
+  emacs -Q -batch -l ert -l nnflux.el -l nnflux-tests.el \
+         ert-run-tests-batch-and-exit
+
+  # or with Basic Auth instead of a token:
+  NNFLUX_TEST_URL=https://miniflux.domain.tld \
+  NNFLUX_TEST_USER=you NNFLUX_TEST_PASSWORD=secret \
+  emacs -Q -batch -l ert -l nnflux.el -l nnflux-tests.el \
+        -f ert-run-tests-batch-and-exit
+#+end_src
+
+** Running a local Miniflux, no Docker, no root
+
+Miniflux needs PostgreSQL: the =miniflux= binary runs as any user, and Postgres can be invoked via =initdb= and =pg_ctl= as a plain user is the standard way to run it anyway.
+
+=shell.nix= and =.envrc= in this repo set up both binaries and all the paths/env vars below,
+entirely inside this repo directory (nothing touches your real data or a system-wide install).
+With [[https://direnv.net/][direnv]] installed, =direnv allow= once picks up =shell.nix= and exports everything from
+=.envrc=; without direnv, run =nix-shell= and =source .envrc= yourself.
+
+First-time setup (creates the database and an admin account):
+
+#+begin_src bash
+  direnv allow   # or: nix-shell, then: source .envrc
+
+  initdb -D "$NNFLUX_PGDATA" -U miniflux --auth=trust
+  pg_ctl -D "$NNFLUX_PGDATA" -l "$NNFLUX_TEST_DIR/pg.log" \
+         -o "-p $NNFLUX_PGPORT -k $NNFLUX_PGSOCK -h ''" start
+  createdb -h "$NNFLUX_PGSOCK" -p "$NNFLUX_PGPORT" -U miniflux miniflux
+
+  RUN_MIGRATIONS=1 CREATE_ADMIN=1 \
+  ADMIN_USERNAME="$NNFLUX_TEST_USER" ADMIN_PASSWORD="$NNFLUX_TEST_PASSWORD" \
+  miniflux
+#+end_src
+
+=DATABASE_URL=/=LISTEN_ADDR= (Miniflux's own config vars) are already set by =.envrc=, so once
+migrations and the admin account exist, later runs are just:
+
+#+begin_src bash
+nnflux-pg-start   # starts postgres, then miniflux in the background
+# ... work ...
+nnflux-pg-stop    # stops both
+#+end_src
+
+Those two are real commands built by =shell.nix= itself (via =pkgs.writeShellScriptBin=), put on =PATH= the moment =direnv allow= (or =nix-shell=) loads it -- no extra tool, no extra file to track, and no shell-specific quirks: they work the same in bash, zsh, fish, or anything else, since direnv can only export *shell functions* to bash/zsh (never fish), but this sidesteps that entirely by not being a shell function at all.Equivalent by hand: =pg_ctl -D "$NNFLUX_PGDATA" ...start= then =miniflux &=, and =pg_ctl -D "q
+  curl -u "$NNFLUX_TEST_USER:$NNFLUX_TEST_PASSWORD" -X POST "$NNFLUX_TEST_URL/v1/feeds" \
+       -H 'Content-Type: application/json' \
+       -d '{"feed_url":"https://miniflux.app/feed.xml"}'
+
+  emacs -Q -batch -l ert -l nnflux.el -l nnflux-tests.el -f ert-run-tests-batch-and-exit
+#+end_src
+
+To stop: =pg_ctl -D "$NNFLUX_PGDATA" stop= (and kill the =miniflux= process). Data persists in =miniflux-test/= (gitignored) between runs, so this also works as a real, always-on local instance to point your actual =gnus-secondary-select-methods= at, not just a throwaway test server, skip =CREATE_ADMIN=1= after the first run once the account exists.
+
 * References
 
 - Miniflux API docs : https://miniflux.app/docs/api.html
