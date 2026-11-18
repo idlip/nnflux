@@ -99,7 +99,7 @@ All through normal Gnus keys, once subscribed to a group:
 
 nnflux ships a small, fixed set of commands (subscribe, search, describe, mark sync) for integrating with gnus specifically.
 
-For anything else [[https://miniflux.app/docs/api.html][Miniflux's API]] supports, check for nnflux helper functions (=C-h f nnflux-= ): ~nnflux--pick-server~, ~nnflux--use-server~, and ~nnflux--get~/~nnflux--put~/~nnflux--post~
+For anything else [[https://miniflux.app/docs/api.html][Miniflux's API]] supports, check for nnflux helper functions (=C-h f nnflux-= ): ~nnflux--pick-server~, ~nnflux--use-server~, and ~nnflux--get~ - ~nnflux--put~ - ~nnflux--post~ act as base callers.
 
 ** Refresh a feed right now
 
@@ -146,11 +146,11 @@ Miniflux's own concepts:
   Podcast/media enclosures on entries, shown as clickable links in the article body (the pattern
   ~nnrss.el~ already uses for the same problem). Easy to do =w= to save or embark-act to play via mpv
 
-- [ ] *E2E & Unit Testing*
+- [X] *E2E & Unit Testing*
 
   Add ERT tests so development is smoother and deterministic than manual workflow test.
 
-- [ ] *Gnus Search*
+- [X] *Gnus Search*
 
   =G G= to search and find feed using miniflux's default search method.
 
@@ -169,8 +169,7 @@ Unit tests (~nnflux-tests.el~, using Emacs's built-in =ert=) cover the pure func
 needed:
 
 #+begin_src bash
-  emacs -Q -batch -l ert -l nnflux.el -l nnflux-tests.el \
-        -f ert-run-tests-batch-and-exit
+  emacs -Q -batch -l ert -l nnflux.el -l nnflux-tests.el -f ert-run-tests-batch-and-exit
 #+end_src
 
 There are also live tests that exercise the backend against a real Miniflux server (list feeds, open
@@ -180,14 +179,12 @@ automatically if no server is configured. Point them at a server with environmen
 #+begin_src bash
   NNFLUX_TEST_URL=http://localhost:8080 \
   NNFLUX_TEST_TOKEN=your-api-token \
-  emacs -Q -batch -l ert -l nnflux.el -l nnflux-tests.el \
-         ert-run-tests-batch-and-exit
+  emacs -Q -batch -l ert -l nnflux.el -l nnflux-tests.el ert-run-tests-batch-and-exit
 
   # or with Basic Auth instead of a token:
   NNFLUX_TEST_URL=https://miniflux.domain.tld \
   NNFLUX_TEST_USER=you NNFLUX_TEST_PASSWORD=secret \
-  emacs -Q -batch -l ert -l nnflux.el -l nnflux-tests.el \
-        -f ert-run-tests-batch-and-exit
+  emacs -Q -batch -l ert -l nnflux.el -l nnflux-tests.el -f ert-run-tests-batch-and-exit
 #+end_src
 
 ** Running a local Miniflux, no Docker, no root
@@ -223,7 +220,13 @@ nnflux-pg-start   # starts postgres, then miniflux in the background
 nnflux-pg-stop    # stops both
 #+end_src
 
-Those two are real commands built by =shell.nix= itself (via =pkgs.writeShellScriptBin=), put on =PATH= the moment =direnv allow= (or =nix-shell=) loads it -- no extra tool, no extra file to track, and no shell-specific quirks: they work the same in bash, zsh, fish, or anything else, since direnv can only export *shell functions* to bash/zsh (never fish), but this sidesteps that entirely by not being a shell function at all.Equivalent by hand: =pg_ctl -D "$NNFLUX_PGDATA" ...start= then =miniflux &=, and =pg_ctl -D "q
+Those two are helper scripts from =shell.nix= itself (via =pkgs.writeShellScriptBin=) and put on =PATH= as soon as =direnv allow= (or =nix-shell=) loads it. They need no extra tool or file, and they work the same in bash, zsh, fish, or any other shell. direnv can only export /shell functions/ to bash and zsh (never fish), so these are built as standalone commands instead.
+
+Equivalent by hand: =pg_ctl -D "$NNFLUX_PGDATA" ... start=, then =miniflux &=.
+
+To try it out, subscribe to a test feed and run the test suite against the live server:
+
+#+begin_src bash
   curl -u "$NNFLUX_TEST_USER:$NNFLUX_TEST_PASSWORD" -X POST "$NNFLUX_TEST_URL/v1/feeds" \
        -H 'Content-Type: application/json' \
        -d '{"feed_url":"https://miniflux.app/feed.xml"}'
