@@ -407,6 +407,28 @@ It must not report a placeholder count."
             (unless was-starred
               (nnflux--put (format "/entries/%d/bookmark" real-id) nil))))))))
 
+;;; Search helpers ("G G") -- gated on gnus-search being available,
+;;; same as nnflux.el itself; degrade to skipped, not failed, without it.
+
+(ert-deftest nnflux-test-group-for-feed ()
+  (skip-unless (featurep 'gnus-search))
+  (let ((nnflux-group-feed (make-hash-table :test 'equal)))
+    (puthash "Feed A" 1 nnflux-group-feed)
+    (puthash "Feed B" 2 nnflux-group-feed)
+    (should (equal (nnflux--group-for-feed 2) "Feed B"))
+    (should (null (nnflux--group-for-feed 99)))))
+
+(ert-deftest nnflux-test-number-for-real-id ()
+  (skip-unless (featurep 'gnus-search))
+  (let ((nnflux-group-entries (make-hash-table :test 'equal))
+        (table (make-hash-table :test 'eql)))
+    (puthash 1 '((id . 500)) table)
+    (puthash 2 '((id . 501)) table)
+    (puthash "Feed A" table nnflux-group-entries)
+    (should (equal (nnflux--number-for-real-id "Feed A" 501) 2))
+    (should (null (nnflux--number-for-real-id "Feed A" 999)))
+    (should (null (nnflux--number-for-real-id "No Such Group" 500)))))
+
 (provide 'nnflux-tests)
 
 ;;; nnflux-tests.el ends here

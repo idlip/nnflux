@@ -1,6 +1,8 @@
-#+TITLE: nnflux: Gnus Miniflux Reader
+#+TITLE: nnflux: Gnus backend for Miniflux (read RSS/Atom feeds in Emacs)
+#+DESCRIPTION: nnflux is a Gnus backend and Emacs Miniflux client. Read your self-hosted Miniflux RSS and Atom feeds as normal Gnus groups, with read and star state synced both ways.
+#+KEYWORDS: gnus, miniflux, emacs, rss, atom, feed reader, newsreader, nnflux, emacs-lisp
 
-Read feeds from self-hosted [[https://miniflux.app/][Miniflux]] server through Gnus, as normal Gnus groups.
+*nnflux* is a [[https://www.gnu.org/software/emacs/manual/html_node/gnus/][Gnus]] backend for [[https://miniflux.app/][Miniflux]]. It lets you read feeds from a self-hosted Miniflux server inside Emacs, as normal Gnus groups, using Miniflux's native REST API. If you want to read RSS in Gnus, or want a Miniflux client for Emacs that is not built on Elfeed, this is it.
 
 #+begin_quote
   This package was written with the help of AI for accomplishing its purpose.
@@ -18,7 +20,8 @@ Read feeds from self-hosted [[https://miniflux.app/][Miniflux]] server through G
 
 -------
 
-#+caption: Gnus screenshot showing nnflux group for PlanetEmacs post
+#+caption: nnflux in Emacs: Gnus summary and article buffer reading a Miniflux feed (PlanetEmacs)
+#+attr_html: :alt Gnus summary and article buffer showing a Miniflux feed read through the nnflux backend in Emacs
 [[file:screenshot.png]]
 
 - Screenshot shows the Gnus summary and article buffer for nnflux group of PlanetEmacs post by Sacha Chua.
