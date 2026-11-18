@@ -1,9 +1,9 @@
-;;; nnflux.el --- Read feeds from Miniflux server as a Gnus back end -*- lexical-binding: t; -*-
+;;; nnflux.el --- Gnus back end for Miniflux: read RSS/Atom feeds in Emacs -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026 Dilip
 
 ;; Author: Dilip | Zororg
-;; Keywords: news, rss, atom, feed, miniflux
+;; Keywords: news, rss, atom, feed, miniflux, gnus
 ;; Package-Requires: ((emacs "27.1"))
 ;; URL: https://github.com/idlip/nnflux
 ;; SPDX-License-Identifier: GPL-3.0-or-later
@@ -78,6 +78,8 @@
 (require 'json)
 (require 'subr-x)
 (require 'auth-source)
+;; gnus-search.el (for "G G" full-text search) > 27.1 only
+(require 'gnus-search nil t)
 
 ;; Tell Gnus this backend can push read/star marks to its server
 (gnus-declare-backend "nnflux" 'none 'address 'server-marks)
@@ -581,6 +583,84 @@ Newly subscribed feeds are picked up by Gnus's own new-group handling
       (nnflux--put (format "/feeds/%d/refresh" feed-id) nil)
       (message "nnflux: subscribed to %s, checking for new groups..." url)
       (gnus-group-get-new-news))))
+
+(defun nnflux--group-for-feed (feed-id)
+  "Group name whose feed id is FEED-ID, or nil.
+Looks in the current server's `nnflux-group-feed', populated by the
+last `nnflux-request-list' -- nil if that hasn't run yet this session."
+  (catch 'found
+    (maphash (lambda (group id) (when (eql id feed-id) (throw 'found group)))
+             nnflux-group-feed)
+    nil))
+
+;;; Server-side search ("G G"), via Miniflux's own full-text search
+
+;; This is defined below inside a runtime `(featurep 'gnus-search)' check
+;; (it must stay a runtime check, not compile-time, or a .elc built where
+;; gnus-search is present would break loading where it isn't) -- the
+;; byte-compiler can't trace into that conditional to see it exists.
+(declare-function nnflux--number-for-real-id "nnflux" (group real-id))
+;; EIEIO's own `defclass'-generated predicate, same reason as above.
+(declare-function gnus-search-nnflux--eieio-childp "nnflux" t)
+
+(when (featurep 'gnus-search)
+
+  (defclass gnus-search-nnflux (gnus-search-engine)
+    ;; Miniflux's search is a single plain-text substring query, not a
+    ;; boolean query language -- always pass the typed string through
+    ;; as-is rather than parsing it into gnus-search's query AST.
+    ((raw-queries-p :initform t))
+    :documentation "Search engine for nnflux, backed by Miniflux's own search.")
+
+  (add-to-list 'gnus-search-default-engines '(nnflux . gnus-search-nnflux))
+
+  (defun nnflux--number-for-real-id (group real-id)
+    "GROUP's local article number for the entry with Miniflux REAL-ID.
+Nil if that entry isn't in GROUP's current fetch window -- see
+`nnflux-request-group'."
+    (let ((table (gethash group nnflux-group-entries)))
+      (and table
+           (catch 'found
+             (maphash (lambda (number entry)
+                        (when (eql (alist-get 'id entry) real-id)
+                          (throw 'found number)))
+                      table)
+             nil))))
+
+  (cl-defmethod gnus-search-run-search ((engine gnus-search-nnflux) server query-spec groups)
+    "Search Miniflux for QUERY-SPEC's text, in GROUPS (or every feed if nil).
+A hit only becomes a usable result if it falls inside its feed's
+current fetch window (`nnflux-fetch-limit') -- older hits have no
+local article number to give Gnus and are skipped, with a message."
+    (let* ((server-label (cadr (gnus-server-to-method server)))
+           (query (gnus-search-make-query-string engine query-spec))
+           (feed-ids (if groups
+                         (delete-dups
+                          (delq nil (mapcar (lambda (g) (gethash (gnus-group-short-name g) nnflux-group-feed))
+                                            groups)))
+                       (list nil)))
+           (skipped 0)
+           results)
+      (nnflux--use-server server-label)
+      (when (zerop (hash-table-count nnflux-group-feed))
+        (nnflux-request-list server-label))
+      (dolist (feed-id feed-ids)
+        (let ((data (nnflux--get "/entries"
+                                  (delq nil (list (list "search" query)
+                                                  (and feed-id (list "feed_id" feed-id)))))))
+          (dolist (entry (alist-get 'entries data))
+            (let* ((entry-feed-id (alist-get 'feed_id entry))
+                   (group (nnflux--group-for-feed entry-feed-id)))
+              (if (not group)
+                  (setq skipped (1+ skipped))
+                (nnflux-request-group group server-label)
+                (let ((number (nnflux--number-for-real-id group (alist-get 'id entry))))
+                  (if (not number)
+                      (setq skipped (1+ skipped))
+                    (push (vector (gnus-group-full-name group server) number 100) results))))))))
+      (when (> skipped 0)
+        (message "nnflux: %d search hit(s) outside the fetch window were skipped" skipped))
+      (vconcat (nreverse results)))))
 
 (provide 'nnflux)
 
